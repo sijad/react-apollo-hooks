@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
 import isEqual from 'react-fast-compare';
 
 import objToKey from './objToKey';
@@ -77,6 +77,53 @@ export function useMutation(mutation, baseOptions) {
   const client = useApolloClient();
   return localOptions =>
     client.mutate({ mutation, ...baseOptions, ...localOptions });
+}
+
+export default function useSubscription(query, options) {
+  const prevOptions = useRef();
+  const client = useApolloClient();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(
+    () => {
+      prevOptions.current = options;
+      const subscription = client
+        .subscribe({
+          ...(options || {}),
+          query,
+        })
+        .subscribe({
+          next: nextResult => {
+            setData(nextResult.data);
+          },
+          error: err => {
+            setError(err);
+            setLoading(false);
+          },
+          complete: () => {
+            setLoading(false);
+          },
+        });
+      return () => {
+        subscription.unsubscribe();
+      };
+    },
+    [
+      query,
+      isEqual(prevOptions.current, options) ? prevOptions.current : options,
+    ]
+  );
+
+  return useMemo(
+    () => ({
+      data,
+      error,
+      loading,
+    }),
+    [data, error, loading]
+  );
 }
 
 function ensureSupportedFetchPolicy(fetchPolicy, suspend) {
